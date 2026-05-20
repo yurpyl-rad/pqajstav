@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CSV PlanQA Tavla – Alpha versjon, tech sjekk</title>
+  <script src="https://cdn.plot.ly/plotly-3.1.2.min.js" charset="utf-8"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    .container { display: flex; flex-wrap: wrap; gap: 30px; }
+    .panel { min-width: 400px; flex: 1; }
+    select, input { margin: 0 3px 10px 0; }
+    .controls { margin-bottom: 10px; }
+    table, th, td { border: 1px solid #ccc; border-collapse: collapse; padding: 3px 5px; }
+	table {
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+	  font-size: 12px;
+    }
+	.multi-select {
+	   position: relative;
+	   display: inline-block;
+	   margin: 5px;
+	   text-align: left; /* Centers the text inside the dropdown */
+	}
+	.dropdown-toggle {
+	   background-color: white;
+       border: 1px solid #ccc;
+       padding: 5px 10px;
+       cursor: pointer;
+	}
+	.dropdown-toggle.active {
+	   background-color: #d0eaff; /* light blue */
+	   border-color: #3399ff;
+	   font-weight: bold;
+	}
+	.dropdown-toggle:hover {
+       background-color: #f0f8ff;
+    }
+	.dropdown-menu {
+	   display: none;
+	   position: absolute;
+	   background: white;
+	   border: 1px solid #ccc;
+	   padding: 10px;
+	   max-height: 200px;
+	   overflow-y: auto;
+	   z-index: 100;
+       font-size: 10px;
+	}
+    .dropdown-menu label {
+       display: block;        /* Each label takes full width */
+       margin-bottom: 5px;    /* Space between options */
+    }
+	.multi-select.open .dropdown-menu {
+	   display: block;
+	}
+	#resetFilters {
+      margin: 10px;
+      padding: 6px 12px;
+      background-color: #f44336;
+      color: DarkBlue; 
+      background-color: rgba(255, 165, 0, 0.2); /* 20% transparent background */
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+	#resetFilters:hover {
+      background-color: rgba(255, 165, 0, 0.5);  /* 50% transparent orange; this is red #d32f2f; */
+    }
+	.panel {
+       background-color: #f9f9f9;       /* Light theme background */
+       border: 1px solid #ddd;          /* Soft border */
+       border-radius: 8px;              /* Rounded corners */
+       box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+       padding: 20px;                   /* Inner spacing */
+       margin-bottom: 20px;             /* Space between panels */
+    }
+  </style>
+</head>
+<body>
+  <h2>CSV PlanQA Tavla – Alpha versjon, tech sjekk</h2>
+  <label>
+    Upload CSV File:
+    <input type="file" id="csvFile" accept=".csv">
+  </label>
+  <div id="filters" style="background-color: gray;"></div>
+  <div><button id="resetFilters">Reset Filters</button></div>
+  <div class="panel">
+    <h3>Date Range</h3>
+      <label>From:
+        <input type="date" id="dateStart">
+      </label>
+      <label>To:
+        <input type="date" id="dateEnd">
+      </label>
+  </div>
+  <div class="panel">
+     <h3>Gamma Pass Rate Filter (F0-GPS)</h3>
+    <label for="gpsMin">Min GPS:</label>
+    <input type="range" id="gpsMin" min="0" max="100" value="0">
+
+    <label for="gpsMax">Max GPS:</label>
+    <input type="range" id="gpsMax" min="0" max="100" value="100">
+
+    <div>
+      <span id="gpsMinLabel">0%</span> – 
+      <span id="gpsMaxLabel">100%</span>
+    </div>
+  </div>
+  <div class="container">
+    <div class="panel">
+      <h3>Scatter Plot</h3>
+      <div class="controls">
+        X: <select id="scatterX"></select>
+        Y: <select id="scatterY"></select>
+      </div>
+      <div id="scatter"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Time Series Plot</h3>
+      <div class="controls">
+        Date: <select id="dateCol"></select>
+        Y: <select id="timeSeriesY"></select>
+        <p>Averaging:
+        <select id="agg">
+		  <option value="raw">All Values</option>
+          <option value="day">Day</option>
+          <option value="week">Week</option>
+          <option value="month">Month</option>
+        </select></p>
+      </div>
+      <div id="timeseries"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Bar Chart</h3>
+      <div class="controls">
+        Column: <select id="barCol"></select>
+      </div>
+      <div id="bar"></div>
+    </div>
+	<div class="panel">
+      <h3>Histogram</h3>
+      <div class="controls">
+        Perameter: <select id="histogramCol"></select>
+        <p>Averaging:
+		<select id="histogramAveraging">
+		  <option value="raw">All Values</option>
+		  <option value="daily">Daily Averages</option>
+		  <option value="weekly">Weekly Averages</option>
+		  <option value="monthly">Monthly Averages</option>
+        </select></p>
+      </div>
+      <div id="histogram"></div>
+	  <!--<input type="range" id="monthSlider" min="0" max="11" value="0">
+	  <label for="monthSlider">Month: <span id="monthLabel">Jan</span></label>
+      <input type="range" id="monthSlider" min="0" max="11" value="0">-->
+    </div>
+	<div class="panel">
+      <h3>Pie Chart</h3>
+      <div class="controls">
+        Column: <select id="pieCol"></select>
+      </div>
+      <div id="pie"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Summary Table</h3>
+    <div id="summary"></div>
+  </div>
+
+<script>
+let allData = [], filteredData = [];
+let columns = [];
+
+//function parseDate(s) {
+//  const d = new Date(s); // JavaScript new Date() interprets them as MM.DD.YYYY or treats them inconsistently.
+//  return isNaN(d) ? null : d;
+//}
+function parseDate(s) {
+  if (!s) return null;
+
+  // Detect DD.MM.YYYY or D.M.YYYY
+  const parts = s.split('.');
+  if (parts.length === 3) {
+      const [dd, mm, yyyy] = parts.map(p => parseInt(p));
+      if (!isNaN(dd) && !isNaN(mm) && !isNaN(yyyy)) {
+          return new Date(yyyy, mm - 1, dd); // JS months are 0‑based
+      }
+  }
+
+  // fallback for ISO / other supported formats
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function unique(arr, col) {
+  return [...new Set(arr.map(row => row[col]))].filter(x => x !== undefined && x !== null && x !== "");
+}
+
+// Populate controls after CSV load
+function setupControls() {
+  if (!allData || typeof allData !== 'object') {
+    console.error("Invalid data passed to setupControls:", allData);
+    return;
+  }
+  console.log("First row of data passed to setupControls: ", allData);
+  //const keys = Object.keys(data);
+  
+  columns = Object.keys(allData[0]);
+  // Filters
+  let filterHtml = '';
+  columns.forEach(col => {
+	const vals = unique(allData, col);
+	if (vals.length > 1) { // && vals.length <= 30) {
+		filterHtml += `
+		  <div class="multi-select" data-col="${col}">
+			<button class="dropdown-toggle">${col} ▼</button>
+			<div class="dropdown-menu">
+			  ${vals.map(v => `<label><input type="checkbox" value="${v}"> ${v}</label>`).join('\r\n')}
+			</div>
+		  </div>
+		`;
+	}
+  });
+  document.getElementById('filters').innerHTML = filterHtml;
+  // Reattach dropdown toggle logic
+  document.querySelectorAll('.multi-select').forEach(dropdown => {
+    const toggle = dropdown.querySelector('.dropdown-toggle');
+	const checked = dropdown.querySelectorAll('input:checked');
+      toggle.addEventListener('click', () => {
+      dropdown.classList.toggle('open');
+    });
+   
+    document.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target)) {
+        dropdown.classList.remove('open');
+      }
+    });
+  });
+  ///////////////////////////////////////////////////////////////////////////
+  document.querySelectorAll('.multi-select input[type="checkbox"]').forEach(cb => {
+   cb.addEventListener('change', () => {
+    const dropdown = cb.closest('.multi-select');
+    const toggle = dropdown.querySelector('.dropdown-toggle');
+    const checked = dropdown.querySelectorAll('input:checked');
+
+    if (checked.length > 0) {
+      toggle.classList.add('active');
+    } else {
+      toggle.classList.remove('active');
+    }
+
+    updateAll(); // Trigger plot updates
+   });
+  });
+  ///////////////////////////////////////////////////////////////////////777
+  const numericLikeCols = columns.filter(col => {
+    const sample = allData.slice(0, 20); // check first 20 rows for speed
+    const validCount = sample.filter(row => {
+      const val = row[col];
+      return val !== null && val !== '' && !isNaN(parseFloat(val));
+    }).length;
+    return validCount >= sample.length * 0.8; // at least 80% numeric-like
+  });
+  // Scatter controls
+  //defaultCols maps each control to its preferred column.
+  //If the default column is missing, it gracefully falls back to the first available option.
+  //dateCol uses columns instead of numericLikeCols to allow non-numeric date fields.
+  const defaultCols = {
+    scatterX: 'field size (cm2)',
+    scatterY: 'Result DD rel: %',
+    timeSeriesY: 'F0-GPS',
+    barCol: 'Treatment Machine',
+    dateCol: 'Date',
+	pieCol: 'Treatment Site'
+  };
+  ['scatterX', 'scatterY', 'timeSeriesY', 'barCol', 'dateCol', 'pieCol'].forEach(selId => {
+    let target = document.getElementById(selId);
+	const isDateSelector = selId === 'dateCol';
+    // Choose source list: dateCol might not be numeric
+    const sourceCols = isDateSelector ? columns : numericLikeCols;
+	// Build dropdown options
+    target.innerHTML = sourceCols.map(c => `<option>${c}</option>`).join('');
+	// Set defaults if present, else fallback to first available
+    const defaultCol = defaultCols[selId];
+    const fallbackCol = sourceCols.includes(defaultCol) ? defaultCol : sourceCols[0];
+    target.value = fallbackCol;
+  });
+
+  // Try to pick sensible defaults for time series date
+  let dateField = columns.find(c => /date|time/i.test(c)) || columns[0];
+  document.getElementById('dateCol').value = dateField;
+  //To make the #dateCol dropdown show only one option: "Date", I can bypass the dynamic search and hardcode the option directly:
+  // comment out above _document.getElementById('dateCol').value = dateField;_ line and add this
+  // THIS REQUIRES that the csv has Date column!
+  document.getElementById('dateCol').innerHTML = `<option value="Date">Date</option>`;
+  document.getElementById('dateCol').value = "Date";
+  
+  // Safely assign Y-axis column
+  let yField = numericLikeCols.includes(defaultCols['timeSeriesY'])
+               ? defaultCols['timeSeriesY']
+               : numericLikeCols[0];
+  document.getElementById('timeSeriesY').innerHTML = numericLikeCols.map(col => `<option value="${col}">${col}</option>`).join('');
+  document.getElementById('timeSeriesY').value = yField;
+  //document.getElementById('timeSeriesY').innerHTML = numericLikeCols.map(col => `<option value="${col}">${col}</option>`).join('');
+
+  ////////////////////
+  //const numericCols = columns.filter(col => {
+  //  return allData.every(row => !isNaN(parseFloat(row[col])));
+  //});
+  //const histSelect = document.getElementById('histogramCol');
+  //histSelect.innerHTML = numericCols.map(col => `<option value="${col}">${col}</option>`).join('');
+  //////////////////////
+  
+  const histSelect = document.getElementById('histogramCol');
+  histSelect.innerHTML = numericLikeCols.map(col => `<option value="${col}">${col}</option>`).join('');
+  /////////////////////
+  // Safely assign histogram column
+  const defaultHCol = "F0-GPS";
+  let histoField = numericLikeCols.includes(defaultHCol)
+               ? defaultHCol
+               : numericLikeCols[0];
+  document.getElementById('histogramCol').innerHTML = numericLikeCols.map(col => `<option value="${col}">${col}</option>`).join('');
+  document.getElementById('histogramCol').value = histoField;
+  
+  // Safely assign bar column
+  const defaultBCol = defaultCols['barCol'];
+  let barField = columns.includes(defaultBCol)
+               ? defaultBCol
+               : columns[0];
+  document.getElementById('barCol').innerHTML = columns.map(col => `<option value="${col}">${col}</option>`).join('');
+  document.getElementById('barCol').value = barField;
+  
+  // Safely assign pie column
+  const defaultPieCol = defaultCols['pieCol'];
+  let pieField = columns.includes(defaultPieCol)
+               ? defaultPieCol
+               : columns[0];
+  document.getElementById('pieCol').innerHTML = columns.map(col => `<option value="${col}">${col}</option>`).join('');
+  document.getElementById('pieCol').value = pieField;
+  //document.getElementById('scatterX').innerHTML = numericLikeCols.map(col => `<option value="${col}">${col}</option>`).join('');
+
+
+  //SLIDER update
+  document.getElementById('gpsMin').oninput = () => {
+    document.getElementById('gpsMinLabel').textContent =
+      document.getElementById('gpsMin').value + "%";
+    updateAll();
+  };
+
+  document.getElementById('gpsMax').oninput = () => {
+    document.getElementById('gpsMaxLabel').textContent =
+      document.getElementById('gpsMax').value + "%";
+    updateAll();
+  };
+  
+  document.getElementById('dateStart').onchange = updateAll;
+  document.getElementById('dateEnd').onchange = updateAll;
+
+  //QUICK FILTER RESET BUTTON
+  document.querySelectorAll('.filter, #scatterX, #scatterY, #barCol, #dateCol, #pieCol, #timeSeriesY, #histogramCol, #histogramAveraging, #agg')
+    .forEach(el => el.onchange = updateAll);
+	
+  document.getElementById('resetFilters').addEventListener('click', () => {
+     document.querySelectorAll('.multi-select input[type="checkbox"]').forEach(cb => {
+       cb.checked = false;
+     });
+     // Remove active class from dropdown labels
+     document.querySelectorAll('.multi-select .dropdown-toggle').forEach(toggle => {
+       toggle.classList.remove('active');
+       const colName = toggle.closest('.multi-select').dataset.col;
+       toggle.textContent = `${colName} ▼`;
+     });
+     updateAll(); // Refresh plots with no filters
+   });
+
+	// --- Auto‑detect min/max date in CSV and initialize date range picker ---
+	const dates = allData
+	  .map(r => parseDate(r["Date"]))
+	  .filter(d => d instanceof Date && !isNaN(d));
+
+	if (dates.length > 0) {
+		const minD = new Date(Math.min(...dates));
+		const maxD = new Date(Math.max(...dates));
+
+		document.getElementById("dateStart").value = minD.toISOString().slice(0,10);
+		document.getElementById("dateEnd").value = maxD.toISOString().slice(0,10);
+	}
+	// ------------------------------------------------------------------------
+
+
+  updateAll();
+}
+
+// Filter data on selection --- here
+function getFiltered() {
+  //let data = allData;
+  //document.querySelectorAll('.filter').forEach(filt => {
+  //  let val = filt.value;
+  //  let col = filt.getAttribute('data-col');
+  // if (val !== 'All') data = data.filter(row => String(row[col]) === val);
+  //});
+  //return data;
+  const filters = {};
+  document.querySelectorAll('.multi-select').forEach(dropdown => {
+    const col = dropdown.dataset.col;
+    const selected = Array.from(dropdown.querySelectorAll('input:checked')).map(cb => cb.value);
+    if (selected.length > 0) {
+      filters[col] = selected;
+    }
+  });
+  
+  // Filter the data
+  let filteredData = allData;
+  filteredData = allData.filter(row => {
+    return Object.entries(filters).every(([col, selectedVals]) => {
+      return selectedVals.includes(row[col]);
+    });
+  });
+  
+  // Date range filtering
+  const dStart = new Date(document.getElementById("dateStart").value);
+  const dEnd = new Date(document.getElementById("dateEnd").value);
+  filteredData = filteredData.filter(row => {
+    const d = parseDate(row["Date"]);
+    if (!d) return false;
+
+    if (document.getElementById("dateStart").value && d < dStart) return false;
+    if (document.getElementById("dateEnd").value && d > dEnd) return false;
+
+    return true;
+  });
+  
+  // GPS slider filtering
+  const gpsMin = parseFloat(document.getElementById('gpsMin').value);
+  const gpsMax = parseFloat(document.getElementById('gpsMax').value);
+
+  filteredData = filteredData.filter(row => {
+    let gps = parseFloat(row["F0-GPS"]);
+    return !isNaN(gps) && gps >= gpsMin && gps <= gpsMax;
+  });
+  
+  return filteredData;
+}
+
+function updateAll() {
+  filteredData = getFiltered();
+  drawScatter();
+  drawTimeSeries();
+  drawBar();
+  drawHistogram();
+  drawPie();
+  drawSummary();
+}
+
+// Scatter plot
+function drawScatter() {
+  let xCol = document.getElementById('scatterX').value;
+  let yCol = document.getElementById('scatterY').value;
+  let x = [], y = [];
+  filteredData.forEach(row => {
+    let xv = parseFloat(row[xCol]);
+    let yv = parseFloat(row[yCol]);
+    if (!isNaN(xv) && !isNaN(yv)) { x.push(xv); y.push(yv);}
+  });
+  Plotly.newPlot('scatter', [{
+    x, y, mode: 'markers', type:'scatter', marker:{color:'royalblue'}
+  }], {margin:{t:20, b:40, l:50, r:20}, xaxis:{title:{text: xCol}}, yaxis:{title:{text: yCol}}});
+}
+
+// Time series plot with aggregation and trend
+function drawTimeSeries() {
+  let dateCol = document.getElementById('dateCol').value;
+  let yCol = document.getElementById('timeSeriesY').value;
+  let agg = document.getElementById('agg').value;
+
+  let points = [];
+  filteredData.forEach(row => {
+    let d = parseDate(row[dateCol]);
+    let v = parseFloat(row[yCol]);
+    if (d && !isNaN(v)) points.push({date: d, value: v});
+  });
+
+  // Group by requested period
+  let groupFmt;
+  if (agg === 'raw') groupFmt = d=>d.toISOString()
+  if (agg === 'day') groupFmt = d=>d.toISOString().slice(0,10);
+  if (agg === 'week') groupFmt = d=>{
+    let y = d.getFullYear(); let w = Math.ceil((d - new Date(y,0,1)) / 604800000);
+    return y + "-W" + w;
+  };
+  if (agg === 'month') groupFmt = d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+
+  const groups = {};
+  points.forEach(({date, value}) => {
+    let g = groupFmt(date);
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(value);
+  });
+
+  let x = Object.keys(groups).sort();
+  let y = x.map(g => {
+    let vals = groups[g];
+    return vals.reduce((a,b)=>a+b,0)/vals.length;
+  });
+
+  // Linear trendline
+  let xi = x.map((_,i)=>i), n=x.length;
+  let xbar = (n && xi.reduce((a,b)=>a+b,0)/n) || 0;
+  let ybar = (n && y.reduce((a,b)=>a+b,0)/n) || 0;
+  let slope = (n && xi.reduce((s,i)=>s+(i-xbar)*(y[i]-ybar),0) / xi.reduce((s,i)=>s+(i-xbar)**2,0)) || 0;
+  let intercept = ybar - slope*xbar;
+  let yfit = xi.map(i => slope*i + intercept);
+
+  Plotly.newPlot('timeseries', [
+    {x, y, name:'Avg', mode:'lines+markers', marker:{color:'seagreen'}},
+    {x, y: yfit, name:'Trend', mode:'lines', line:{dash:'dot', color:'red'}}
+  ], {margin:{t:20}, xaxis:{title:{text: agg}}, yaxis:{title:{text: yCol}}});
+}
+
+// Bar plot for chosen column
+function drawBar() {
+  let col = document.getElementById('barCol').value;
+  let groups = {};
+  filteredData.forEach(row => {
+    let v = row[col];
+    if (v !== undefined && v !== null && v !== '') {
+      groups[v] = (groups[v] || 0) + 1;
+    }
+  });
+  let x = Object.keys(groups);
+  let y = x.map(k => groups[k]);
+  Plotly.newPlot('bar', [{
+    x, y, type:'bar', marker:{color:'orange'}
+  }], {margin:{t:20}, title: {text: `Barplot of ${col}`, font: {family: 'Arial', size: 14, color: '#333'}}, yaxis:{title:{text: 'Count'}}});
+}
+// Histogram plot
+function drawHistogram() {
+  const col = document.getElementById('histogramCol').value;
+  //const monthIndex = parseInt(document.getElementById('monthSlider').value);
+  //const monthFiltered = filteredData.filter(row => {
+  //  const date = new Date(row['PlanDate']);
+  //  return date.getMonth() === monthIndex;
+  //});
+  //const values = monthFiltered.map(row => parseFloat(row[col])).filter(v => !isNaN(v));
+  const values = filteredData.map(row => parseFloat(row[col])).filter(v => !isNaN(v));
+  const averaging = document.getElementById('histogramAveraging').value;
+  let averagedData = [];
+
+  if (averaging === 'raw') {
+    averagedData = values;
+  } else {
+    const grouped = {};
+    filteredData.forEach(row => {
+      const date = new Date(parseDate(row['Date']));
+      console.log("row date is ", row['Date'])
+      console.log("date is ", date)
+      let key;
+      if (averaging === 'daily') key = date.toISOString().split(' ')[0];
+      function getISOWeek(date) {
+        const tempDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNum = tempDate.getUTCDay() || 7;
+        tempDate.setUTCDate(tempDate.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(tempDate.getUTCFullYear(), 0, 1));
+        const weekNum = Math.ceil((((tempDate - yearStart) / 86400000) + 1) / 7);
+        return `${tempDate.getUTCFullYear()}-W${weekNum.toString().padStart(2, '0')}`;
+      }
+      if (averaging === 'weekly') key = getISOWeek(date) //`${date.getFullYear()}-W${Math.ceil(date.getDate() / 7)}`;
+      if (averaging === 'monthly') key = `${date.getFullYear()}-${date.getMonth() + 1}`;
+
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(parseFloat(row[col]));
+    });
+    
+    averagedData = Object.values(grouped).map(arr => {
+      const valid = arr.filter(v => !isNaN(v));
+      return valid.reduce((a, b) => a + b, 0) / valid.length;
+    });
+  }
+
+  const values1 = averagedData
+  console.log("the suggested mean calc values1: ", values1)
+  console.log("the suggested mean calc values1.reduce((a, b) => a + b, 0): ", values1.reduce((a, b) => a + b, 0))
+  console.log("the suggested mean calc values1.length: ", values1.length)
+  const mean = values1.reduce((a, b) => a + b, 0) / values1.length;
+  const std = Math.sqrt(values1.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values1.length);
+  const ci95 = mean - (1.96 * std) // / Math.sqrt(values1.length); // 95% confidence interval
+  const N = values1.length;
+  const stdErr = std / Math.sqrt(N);
+  const ci95_low  = mean - 1.96 * stdErr;
+  //const ci95_high = mean + 1.96 * stdErr;
+
+
+  const statsText = `Mean: ${mean.toFixed(2)}<br>Std Dev: ${std.toFixed(2)}<br><span style="background-color: yellow;">95% CI: &gt;${ci95_low.toFixed(2)}</span><br><span style="background-color: yellow;">Ctrl.Lim: &gt;${ci95.toFixed(2)}</span>` //95% CI: >${ci95.toFixed(2)}`;
+
+
+  const trace = {
+    x: values1,
+    type: 'histogram',
+    marker: { color: '#3399ff' }
+  };
+
+  // Compute histogram bins using Plotly's internal binning helper
+
+
+
+
+
+  Plotly.newPlot('histogram', [trace], {
+    title: {text: `Histogram of ${col}`, font: {family: 'Arial', size: 14, color: '#333'} },
+    xaxis: { title: {text: col } },
+    yaxis: { title: {text: 'Count' } },
+	//shapes: shapes,
+	annotations: [{
+		text: statsText,
+		xref: 'paper',
+		yref: 'paper',
+		x: 1.05, //ner left edge //x: 1.05, // slightly beyond right edge
+		y: 1.25, // slightly above top edge
+		showarrow: false,		
+        //xanchor: 'left',
+        //yanchor: 'top',
+		align: 'auto',
+		bgcolor: '#f0f0f0',
+		bordercolor: '#ccc',
+		borderwidth: 1,
+		font: { size: 12 }
+    }]
+  }).then(gd => {
+
+    // Get the computed histogram bins & counts
+    const hist = gd.calcdata[0];          // Plotly’s internal histogram data
+    const counts = hist.map(bin => bin.y);
+    const maxY = Math.max(...counts);
+
+    // Build vertical shapes using maxY
+    const shapes = [
+	  {
+		type: 'line',
+		x0: ci95_low,
+		x1: ci95_low,
+		y0: 0,
+		y1: 10,
+		xref: 'x',
+		yref: 'paper',
+		line: {color: 'green', width: 2, dash: 'dot'}
+	  },
+	  {
+		type: 'line',
+		x0: ci95,
+		x1: ci95,
+		y0: 0,
+		y1: 10,
+		xref: 'x',
+		yref: 'paper',
+		line: {color: 'red', width: 2, dash: 'dot'}
+	  }
+    ];
+    // Add shapes to finished plot
+    Plotly.relayout(gd, { shapes: shapes });
+  });
+}
+
+// Pie plot for chosen column
+function drawPie() {
+  let col = document.getElementById('pieCol').value;
+  let groups = {};
+  filteredData.forEach(row => {
+    let v = row[col];
+    if (v !== undefined && v !== null && v !== '') {
+      groups[v] = (groups[v] || 0) + 1;
+    }
+  });
+  let x = Object.keys(groups);
+  let y = Object.values(groups); //x.map(k => groups[k]);
+  const pieData = [{
+     type: 'pie',
+     labels: x,
+     values: y,
+     textinfo: 'label+percent',
+	 textfont: {
+        size: 10
+     },
+     insidetextorientation: 'radial',
+	 scale: 0.5, //shrink the pie
+     automargin: true
+  }];
+
+  const pieLayout = {
+     font: { size: 10 },
+     margin: {"t": 0, "b": 0, "l": 0, "r": 0},
+  };
+
+  Plotly.newPlot('pie', pieData, pieLayout);
+  //Plotly.newPlot('bar', [{
+  //  x, y, type:'bar', marker:{color:'orange'}
+  //}], {margin: {t:20}, title: {text: `Barplot of ${col}`, font: {family: 'Arial', size: 14, color: '#333'}}, yaxis:{title:{text: 'Count'}}});
+}
+
+//update 20.03.2026
+// Reusable ISO week key (YYYY-Www)
+function getISOWeekKey(dateObj) {
+  if (!dateObj) return null;
+  const tmp = new Date(Date.UTC(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate()));
+  const dayNum = tmp.getUTCDay() || 7;
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
+  return `${tmp.getUTCFullYear()}-W${String(weekNum).padStart(2,'0')}`;
+}
+
+
+// Summary table: mean, min, max for numeric columns
+//function drawSummary() {
+//  if (!filteredData.length) { document.getElementById('summary').innerHTML = "No data"; return; }
+//  let html = '<table><tr><th>Column</th><th>Mean</th><th>Min</th><th>Max</th></tr>';
+//  columns.forEach(col => {
+//    let nums = filteredData.map(r=>parseFloat(r[col])).filter(x=>!isNaN(x));
+//    if (nums.length) {
+//      let mean = (nums.reduce((a,b)=>a+b,0)/nums.length).toFixed(2);
+//      html += `<tr><td>${col}</td><td>${mean}</td><td>${Math.min(...nums).toFixed(3)}</td><td>${Math.max(...nums).toFixed(3)}</td></tr>`;
+//    }
+//  });
+//  html += '</table>';
+//  document.getElementById('summary').innerHTML = html;
+//}
+function drawSummary() {
+  const el = document.getElementById('summary');
+  if (!filteredData || !filteredData.length) { el.innerHTML = "No data"; return; }
+
+  // ---- Utilities on filtered data ----
+  const toNum = v => {
+    const x = parseFloat(String(v).replace(',', '.')); // guard comma decimals
+    return Number.isFinite(x) ? x : NaN;
+  };
+
+  // Dates
+  const dates = filteredData
+    .map(r => parseDate(r['Date']))
+    .filter(d => d instanceof Date && !isNaN(d));
+  const oldest = dates.length ? new Date(Math.min(...dates)) : null;
+  const newest = dates.length ? new Date(Math.max(...dates)) : null;
+
+  // Unique plan count (requires plan_global_index)
+  const planIds = new Set(
+    filteredData.map(r => r['plan_global_index']).filter(v => v !== undefined && v !== null && String(v) !== '')
+  );
+  const totalPlans = planIds.size;
+
+  // Group-by helpers for daily / weekly / monthly plan counts
+  function groupCountsBy(keyFn) {
+    const m = new Map(); // key -> Set(plan_global_index)
+    for (const r of filteredData) {
+      const d = parseDate(r['Date']); if (!d) continue;
+      const pid = r['plan_global_index']; if (pid === undefined || pid === null || String(pid)==='') continue;
+      const k = keyFn(d);
+      if (!m.has(k)) m.set(k, new Set());
+      m.get(k).add(pid);
+    }
+    // return array of counts per period
+    return Array.from(m.values()).map(set => set.size);
+  }
+  const dailyCounts   = groupCountsBy(d => d.toISOString().slice(0,10)); // YYYY-MM-DD
+  const weeklyCounts  = groupCountsBy(getISOWeekKey);
+  const monthlyCounts = groupCountsBy(d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+
+  const avg = arr => (arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length) : 0);
+
+  // ---- Requested numeric columns: mean/min/max ----
+  // Names taken from your CSV header exactly.  (If one is missing in a given file it will be skipped.)
+  const metricCols = [
+    // Criterion & Result DD
+    {label: 'Criterion DD (%)',          col: 'Criterion DD (%)'},
+    {label: 'Criterion DD (cGy)',        col: 'Criterion DD(cGy)'},
+    {label: 'Result DD abs: cGy',        col: 'Result DD abs: cGy'},
+    {label: 'Result DD rel: %',          col: 'Result DD rel: %'},
+    // F0 block
+    {label: 'F0-Toleranse',              col: 'F0-Toleranse'},
+    {label: 'F0-GPS',                    col: 'F0-GPS'},
+    {label: 'F0-failHigh',               col: 'F0-failHigh'},
+    {label: 'F0-failLow',                col: 'F0-failLow'},
+    {label: 'F0-total',                  col: 'F0-total'},
+    {label: 'F0-pointsAverage',          col: 'F0-pointsAverage'},
+    {label: 'F0-pointsSTDEV',            col: 'F0-pointsSTDEV'},
+    {label: 'F0-EVENT-COUNT',            col: 'F0-EVENT-COUNT'},
+    // geometry / field
+    {label: 'field size (cm2)',          col: 'field size (cm2)'},
+    {label: 'FCO_2D (cm)',               col: 'FCO_2D (cm)'},
+    {label: 'FCO_X (cm)',                col: 'FCO_X (cm)'},
+    {label: 'FCO_Y (cm)',                col: 'FCO_Y (cm)'},
+    {label: 'MU:(130*Dfr)',              col: 'MU:(130*Dfr)'},
+  ];
+
+  function statsFor(col) {
+    if (!filteredData[0].hasOwnProperty(col)) return null;
+    const vals = filteredData.map(r => toNum(r[col])).filter(v => Number.isFinite(v));
+    if (!vals.length) return {mean: NaN, min: NaN, max: NaN};
+    const s = vals.reduce((a,b)=>a+b,0)/vals.length;
+    return {mean: s, min: Math.min(...vals), max: Math.max(...vals)};
+  }
+
+  // List of all beam energies from both columns (if present)
+  function listBeamEnergies() {
+    const cols = ['Energy','F0BeamEnergy']; // seen in sample CSV
+    const set = new Set();
+    for (const r of filteredData) {
+      for (const c of cols) if (r.hasOwnProperty(c)) {
+        const v = String(r[c]).trim();
+        if (v !== '' && v.toLowerCase() !== 'na' && v !== 'undefined') set.add(v);
+      }
+    }
+    // normalize numeric-like values to a sorted list
+    const nums = [], texts = [];
+    for (const v of set) {
+      const f = toNum(v);
+      if (Number.isFinite(f)) nums.push(f); else texts.push(v);
+    }
+    nums.sort((a,b)=>a-b);
+    texts.sort((a,b)=>a.localeCompare(b));
+    return [...nums.map(x=>String(x)), ...texts];
+  }
+
+  // ---- Render HTML ----
+  let html = '';
+
+  // KPI header table
+  html += '<table><tr><th colspan="2">Plan KPIs (filtered)</th></tr>';
+  html += `<tr><td>Total plans (unique plan_global_index)</td><td><b>${totalPlans}</b></td></tr>`;
+  html += `<tr><td>Avg plans / day</td><td>${avg(dailyCounts).toFixed(2)}</td></tr>`;
+  html += `<tr><td>Avg plans / week</td><td>${avg(weeklyCounts).toFixed(2)}</td></tr>`;
+  html += `<tr><td>Avg plans / month</td><td>${avg(monthlyCounts).toFixed(2)}</td></tr>`;
+  html += `<tr><td>Oldest plan date</td><td>${oldest ? oldest.toISOString().slice(0,10) : '—'}</td></tr>`;
+  html += `<tr><td>Newest plan date</td><td>${newest ? newest.toISOString().slice(0,10) : '—'}</td></tr>`;
+  html += '</table><br/>';
+
+  // Numeric metrics (mean/min/max) — only for the requested columns
+  html += '<table><tr><th>Metric</th><th>Mean</th><th>Min</th><th>Max</th></tr>';
+  for (const m of metricCols) {
+    const s = statsFor(m.col);
+    if (!s) continue; // column not present
+    const fmt = (x) => Number.isFinite(x) ? x.toFixed(3) : '—';
+    html += `<tr><td>${m.label}</td><td>${fmt(s.mean)}</td><td>${fmt(s.min)}</td><td>${fmt(s.max)}</td></tr>`;
+  }
+  html += '</table><br/>';
+
+  // Beam energies list
+  const energies = listBeamEnergies();
+  html += '<table><tr><th>Beam energies (unique)</th></tr>';
+  html += `<tr><td>${energies.join(', ') || '—'}</td></tr>`;
+  html += '</table>';
+
+  el.innerHTML = html;
+}
+//end update 20.03.2026
+
+// CSV loader
+document.getElementById('csvFile').addEventListener('change', e=>{
+  let file = e.target.files[0];
+  console.log("CSV file loaded:", file);
+  if (!file) return;
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true,
+    complete: function(res) { 
+	  console.log("Parse results: ", res)
+	  // Identify empty columns
+	  //let data0 = res.data;
+      //const columns = Object.keys(data0[0]);
+      //const nonEmptyCols = columns.filter(col =>
+      //  data0.some(row => row[col] !== "" && row[col] != null)
+	  //)
+	  allData = res.data; 
+	  //filter(row => row.F0-GPS); 
+	  setupControls(); 
+	}
+  });
+});
+
+</script>
+<script>
+document.querySelectorAll('.multi-select').forEach(dropdown => {
+  const toggle = dropdown.querySelector('.dropdown-toggle');
+  toggle.addEventListener('click', () => {
+    dropdown.classList.toggle('open');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!dropdown.contains(e.target)) {
+      dropdown.classList.remove('open');
+    }
+  });
+});
+
+//const filters = {};
+//document.querySelectorAll('.multi-select').forEach(dropdown => {
+//  const col = dropdown.dataset.col;
+//  const selected = Array.from(dropdown.querySelectorAll('input:checked')).map(cb => cb.value);
+//  if (selected.length > 0) {
+//    filters[col] = selected;
+//  }
+  
+document.querySelectorAll('.multi-select input[type="checkbox"]').forEach(cb => {
+  cb.addEventListener('change', () => {
+    const dropdown = cb.closest('.multi-select');
+    const toggle = dropdown.querySelector('.dropdown-toggle');
+    const checked = dropdown.querySelectorAll('input:checked');
+
+    if (checked.length > 0) {
+      toggle.classList.add('active');
+    } else {
+      toggle.classList.remove('active');
+    }
+
+    updateAll(); // re-filter and redraw plots
+  });
+});
+</script>
+</body>
+</html>
