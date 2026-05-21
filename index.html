@@ -87,6 +87,7 @@
     Upload CSV File:
     <input type="file" id="csvFile" accept=".csv">
   </label>
+  <!-- <button id="clearCsv">Clear CSV</button> -->
   <div id="filters" style="background-color: gray;"></div>
   <div><button id="resetFilters">Reset Filters</button></div>
   <div class="panel">
@@ -129,6 +130,7 @@
         <p>Averaging:
         <select id="agg">
 		  <option value="raw">All Values</option>
+		  <option value="Plan">Plan</option>
           <option value="day">Day</option>
           <option value="week">Week</option>
           <option value="month">Month</option>
@@ -176,6 +178,27 @@
   </div>
 
 <script>
+
+/*
+window.addEventListener('load', () => {
+  const cached = localStorage.getItem("csvPlanQATavlaData");
+
+  if (cached) {
+    console.log("Loaded CSV from cache");
+
+    Papa.parse(cached, {
+      header: true,
+      skipEmptyLines: true,
+      complete: function(res) {
+        allData = res.data;
+        setupControls();
+      }
+    });
+  }
+});
+*/
+
+
 let allData = [], filteredData = [];
 let columns = [];
 
@@ -488,9 +511,21 @@ function drawTimeSeries() {
     if (d && !isNaN(v)) points.push({date: d, value: v});
   });
 
-  // Group by requested period
+  // Group by requested period (this is function)
+  
+  // correct mental modell: 
+  // agg value groupFmt                      pos-processing
+  // ----------------------------------------------------
+  // raw       exact timestamp of the plan   expand values
+  // Plan      exact timestamp of the plan   average values
+  // Day, Week, Month  time bucket           average values
+  
   let groupFmt;
-  if (agg === 'raw') groupFmt = d=>d.toISOString()
+  // converts date to string. After that this is normalized to UTC. which can shift time.
+  if (agg === 'raw' || agg == 'Plan') {
+      //groupFmt = d=>d.toISOString()
+	  groupFmt = d=>d.getTime();
+	  }
   if (agg === 'day') groupFmt = d=>d.toISOString().slice(0,10);
   if (agg === 'week') groupFmt = d=>{
     let y = d.getFullYear(); let w = Math.ceil((d - new Date(y,0,1)) / 604800000);
@@ -501,15 +536,66 @@ function drawTimeSeries() {
   const groups = {};
   points.forEach(({date, value}) => {
     let g = groupFmt(date);
-    if (!groups[g]) groups[g] = [];
-    groups[g].push(value);
+    if (!groups[g]) {
+	    groups[g] = {
+		   t: (agg=='raw')? date.getTime(): date, //reference time 
+		   vals: []
+		   };
+		}
+    //groups[g].push(value);
+	groups[g].vals.push(value); 
   });
 
-  let x = Object.keys(groups).sort();
-  let y = x.map(g => {
-    let vals = groups[g];
-    return vals.reduce((a,b)=>a+b,0)/vals.length;
+  //let x = Object.keys(groups).sort();
+  let entries = Object.entries(groups);
+  //sort using numeric time
+  entries.sort((a, b) => {
+     let ta = (typeof a[1].t === "number") ? a[1].t : a[1].t.getTime();
+     let tb = (typeof b[1].t === "number") ? b[1].t : b[1].t.getTime();
+     return ta - tb;
   });
+  
+  ///
+  //let x = entries.map(([k, g]) =>
+  //  (typeof g.t === "number") ? new Date(g.t) : g.t
+  //);
+  //let y = entries.map(([k, g]) => {
+  //  let vals = g.vals;
+  //  return vals.reduce((a,b)=>a+b,0)/vals.length;
+  //});
+  
+  let x = [];
+  let y = [];
+
+	entries.forEach(([k, g]) => {
+	  let baseTime = (typeof g.t === "number") ? new Date(g.t) : g.t;
+
+	  if (agg === 'raw') {
+		// push ALL values (no averaging)
+		g.vals.forEach(v => {
+		  x.push(baseTime);
+		  y.push(v);
+		});
+	  } else if (agg === 'Plan') {
+       // plan -> average at same timestamp
+       let avg = g.vals.reduce((a,b)=>a+b,0)/g.vals.length;
+       x.push(baseTime);
+       y.push(avg);
+      } 
+	  else {
+		//  averaged case (unchanged)
+		x.push(baseTime);
+		let avg = g.vals.reduce((a,b)=>a+b,0)/g.vals.length;
+		y.push(avg);
+	  }
+	});
+  
+
+  //let y = x.map(g => {
+  //  let vals = groups[g];
+  //  return vals.reduce((a,b)=>a+b,0)/vals.length;
+  //});
+  
 
   // Linear trendline
   let xi = x.map((_,i)=>i), n=x.length;
@@ -865,22 +951,54 @@ document.getElementById('csvFile').addEventListener('change', e=>{
   let file = e.target.files[0];
   console.log("CSV file loaded:", file);
   if (!file) return;
+  
+  //
+  //const reader = new FileReader();
+  //reader.onload = function(event) {
+  //	  //const csvText = event.target.result;
+  //	  // store RAW CSV
+  //	  //sessionStorage.setItem("csvPlanQATavlaData", csvText); // exeeds limits
+  //	  //localStorage.setItem("csvPlanQATavlaData", csvText);
+  //	  //sessionStorage.setItem("csvFileName", file.name);
+  //parse CSV
   Papa.parse(file, {
-    header: true, skipEmptyLines: true,
-    complete: function(res) { 
+	header: true, skipEmptyLines: true,
+	complete: function(res) { 
 	  console.log("Parse results: ", res)
 	  // Identify empty columns
 	  //let data0 = res.data;
-      //const columns = Object.keys(data0[0]);
-      //const nonEmptyCols = columns.filter(col =>
-      //  data0.some(row => row[col] !== "" && row[col] != null)
+	  //const columns = Object.keys(data0[0]);
+	  //const nonEmptyCols = columns.filter(col =>
+	  //  data0.some(row => row[col] !== "" && row[col] != null)
 	  //)
 	  allData = res.data; 
 	  //filter(row => row.F0-GPS); 
+	  
 	  setupControls(); 
 	}
   });
+  //};
+  //reader.readAsText(file);  // important step
 });
+
+/*
+document.getElementById('clearCsv').addEventListener('click', () => {
+  localStorage.removeItem("csvPlanQATavlaData");
+  allData = [];
+
+  console.log("CSV cache cleared");
+
+  // optional: reset UI
+  location.reload();  
+});
+window.addEventListener("beforeunload", () => {
+  localStorage.removeItem("csvPlanQATavlaData");
+});
+function updateClearButton() {
+  const btn = document.getElementById('clearCsv');
+  btn.style.display = localStorage.getItem("csvPlanQATavlaData") ? 'block' : 'none';
+}
+*/
 
 </script>
 <script>
